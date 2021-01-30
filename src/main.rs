@@ -289,7 +289,7 @@ async fn run(handle: EventHandlerHandle) -> Result<!> {
             let slug: String = title
                 .chars()
                 .scan(false, |state, x| {
-                    if x.is_ascii_alphabetic() {
+                    if x.is_ascii_alphanumeric() {
                         *state = false;
                         Some(Some(x.to_ascii_lowercase()))
                     } else if *state {
