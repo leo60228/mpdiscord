@@ -13,6 +13,7 @@ crossbeam = "0.8.0"
 discord_game_sdk = "1.0.1"
 finally-block = "0.2.0"
 futures = "0.3.12"
-mpd_client = "0.5.0"
+mparsed = "0.2.0"
 pin-utils = "0.1.0"
+serde = { version = "1.0.123", features = ["derive"] }
 tokio = { version = "1.1.1", features = ["full"] }
