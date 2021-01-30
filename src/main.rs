@@ -245,6 +245,7 @@ async fn run(handle: EventHandlerHandle) -> Result<!> {
     println!("logged in as {:#?}", user);
 
     let mut stream = BufStream::new(TcpStream::connect("localhost:6600").await?);
+    let artfiles = tokio::fs::read_to_string("artfiles.txt").await?;
 
     #[derive(Deserialize)]
     struct Song {
@@ -252,6 +253,10 @@ async fn run(handle: EventHandlerHandle) -> Result<!> {
         artist: Option<String>,
         album: Option<String>,
     }
+
+    let mut connect_resp = String::new();
+    stream.read_line(&mut connect_resp).await?;
+    print!("connected, {}", connect_resp);
 
     loop {
         let time = SystemTime::now();
@@ -279,6 +284,27 @@ async fn run(handle: EventHandlerHandle) -> Result<!> {
         if let Some(title) = &song.title {
             println!("{}", title);
             activity.with_details(title);
+
+            let slug: String = title
+                .chars()
+                .scan(false, |state, x| {
+                    if x.is_ascii_alphabetic() {
+                        *state = false;
+                        Some(Some(x.to_ascii_lowercase()))
+                    } else if *state {
+                        Some(None)
+                    } else {
+                        *state = true;
+                        Some(Some('-'))
+                    }
+                })
+                .flatten()
+                .collect();
+            if artfiles.lines().any(|x| x == slug) {
+                println!("(Cover)");
+                activity.with_large_image_key(&slug);
+                activity.with_large_image_tooltip(&title);
+            }
         }
 
         let mut state = String::new();
