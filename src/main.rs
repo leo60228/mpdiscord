@@ -1,19 +1,19 @@
-#![feature(never_type, type_alias_impl_trait)]
+#![feature(never_type, type_alias_impl_trait, or_patterns)]
 
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
-use discord_game_sdk::{Activity, Discord, EventHandler, User};
+use discord_game_sdk::{Activity, CreateFlags, Discord, EventHandler, User};
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
-use once_cell::sync::OnceCell;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::{broadcast, oneshot};
+use std::time::Duration;
+use tokio::sync::{oneshot, watch};
 
 #[derive(Clone)]
 pub struct EventHandlerHandle {
-    user_update_tx: broadcast::Sender<User>,
-    user: Arc<OnceCell<User>>,
+    user_tx: Arc<watch::Sender<Option<User>>>,
+    user_rx: watch::Receiver<Option<User>>,
     queue: Arc<SegQueue<FullyErasedCallback>>,
 }
 
@@ -87,19 +87,23 @@ where
 
 impl EventHandlerHandle {
     pub fn new() -> Self {
-        let (user_update_tx, _) = broadcast::channel(1);
+        let (user_tx, user_rx) = watch::channel(None);
         Self {
-            user_update_tx,
-            user: Arc::new(OnceCell::new()),
+            user_tx: Arc::new(user_tx),
+            user_rx,
             queue: Arc::new(SegQueue::new()),
         }
     }
 
     pub async fn user(&self) -> Result<User> {
-        if let Some(user) = self.user.get() {
-            Ok(user.clone())
-        } else {
-            Ok(self.user_update_tx.subscribe().recv().await?)
+        let mut rx = self.user_rx.clone();
+
+        loop {
+            if let Some(user) = rx.borrow().clone() {
+                return Ok(user);
+            }
+
+            rx.changed().await?;
         }
     }
 
@@ -139,34 +143,63 @@ impl Default for EventHandlerHandle {
 
 impl EventHandler for EventHandlerHandle {
     fn on_current_user_update(&mut self, discord: &Discord<Self>) {
-        self.user
-            .get_or_try_init::<_, anyhow::Error>(|| {
-                let user = discord.current_user()?;
-                self.user_update_tx.send(user.clone())?;
-                Ok(user)
-            })
+        self.user_tx
+            .send(Some(discord.current_user().unwrap()))
             .unwrap();
     }
 }
 
 const CLIENT_ID: i64 = 804763079581761556;
 
-async fn run_discord(handle: EventHandlerHandle) -> Result<!> {
-    let mut client = Discord::<EventHandlerHandle>::new(CLIENT_ID)?;
-    *client.event_handler_mut() = Some(handle.clone());
+async fn run_discord<F1, F2>(on_connection: F1) -> Result<!>
+where
+    F1: Fn(EventHandlerHandle) -> F2,
+    F2: FnOnce(),
+{
+    'reconnect: loop {
+        let handle = EventHandlerHandle::new();
 
-    loop {
-        client.run_callbacks()?;
-        let futures = FuturesUnordered::new();
-        while let Some(callback) = handle.queue.pop() {
-            futures.push(callback.call_box_async(&client));
+        let mut client = match Discord::<EventHandlerHandle>::with_create_flags(
+            CLIENT_ID,
+            CreateFlags::NoRequireDiscord,
+        ) {
+            Ok(x) => x,
+            Err(discord_game_sdk::Error::Internal) => {
+                println!("couldn't connect, retrying...");
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+                continue 'reconnect;
+            }
+            Err(e) => return Err(e.into()),
+        };
+        *client.event_handler_mut() = Some(handle.clone());
+
+        let _disconnection = finally_block::finally(on_connection(handle.clone()));
+
+        loop {
+            match client.run_callbacks() {
+                Ok(()) => (),
+                Err(discord_game_sdk::Error::NotRunning) => {
+                    println!("disconnected, reconnecting...");
+                    continue 'reconnect;
+                }
+                Err(e) => return Err(e.into()),
+            }
+
+            let futures = FuturesUnordered::new();
+            while let Some(callback) = handle.queue.pop() {
+                futures.push(callback.call_box_async(&client));
+            }
+            futures.collect::<()>().await;
+            tokio::task::yield_now().await;
         }
-        futures.collect::<()>().await;
-        tokio::task::yield_now().await;
     }
 }
 
-fn run_discord_thread(handle: EventHandlerHandle) -> impl Future<Output = Result<!>> {
+fn run_discord_thread<F1, F2>(on_connection: F1) -> impl Future<Output = Result<!>>
+where
+    F1: Fn(EventHandlerHandle) -> F2 + Send + 'static,
+    F2: FnOnce(),
+{
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -174,7 +207,7 @@ fn run_discord_thread(handle: EventHandlerHandle) -> impl Future<Output = Result
 
     let thread = async_thread::spawn(move || {
         let local = tokio::task::LocalSet::new();
-        local.block_on(&rt, run_discord(handle.clone()))
+        local.block_on(&rt, run_discord(on_connection))
     });
 
     async move {
@@ -203,16 +236,31 @@ macro_rules! with_closure {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<!> {
-    let handle = EventHandlerHandle::new();
-
-    let discord = run_discord_thread(handle.clone());
-
+async fn run(handle: EventHandlerHandle) -> Result<!> {
     let user = handle.user().await?;
-    println!("connected as {:#?}", user);
+    println!("logged in as {:#?}", user);
 
     handle.update_activity(Activity::empty()).await?;
 
-    discord.await?
+    future::pending().await
+}
+
+fn main() -> Result<!> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+
+    rt.block_on(async {
+        let rt_handle = rt.handle().clone();
+
+        let discord = run_discord_thread(move |handle| {
+            println!("connected");
+
+            let (fut, fut_handle) = future::abortable(run(handle));
+            rt_handle.spawn(fut);
+            move || fut_handle.abort()
+        });
+
+        discord.await
+    })
 }

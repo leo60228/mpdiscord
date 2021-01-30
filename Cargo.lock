@@ -238,6 +238,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "finally-block"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "086f2744f22eb18fb866d3c68f28b096315d5d9cb562dd3418c38eec986621c9"
+
+[[package]]
 name = "funty"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -492,9 +498,10 @@ dependencies = [
  "async-thread",
  "crossbeam",
  "discord_game_sdk",
+ "finally-block",
  "futures",
  "mpd_client",
- "once_cell",
+ "pin-utils",
  "tokio",
 ]
 
