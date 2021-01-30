@@ -1,6 +1,6 @@
 #![feature(never_type, type_alias_impl_trait, or_patterns)]
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use crossbeam::queue::SegQueue;
 use discord_game_sdk::{Activity, CreateFlags, Discord, EventHandler, User};
 use futures::prelude::*;
@@ -245,7 +245,8 @@ async fn run(handle: EventHandlerHandle) -> Result<!> {
     println!("logged in as {:#?}", user);
 
     let mut stream = BufStream::new(TcpStream::connect("localhost:6600").await?);
-    let artfiles = tokio::fs::read_to_string("artfiles.txt").await?;
+    let artfiles_path = std::env::args_os().nth(1).context("missing path")?;
+    let artfiles = tokio::fs::read_to_string(artfiles_path).await?;
 
     #[derive(Deserialize)]
     struct Song {
