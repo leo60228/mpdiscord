@@ -354,7 +354,9 @@ fn main() -> Result<!> {
         let discord = run_discord_thread(move |handle| {
             println!("connected");
 
-            let (fut, fut_handle) = future::abortable(run(handle));
+            let (fut, fut_handle) = future::abortable(async move {
+                run(handle).await.unwrap();
+            });
             rt_handle.spawn(fut);
             move || fut_handle.abort()
         });
