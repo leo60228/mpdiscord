@@ -10,7 +10,7 @@ client.connect()
 
 for song in client.playlistinfo():
     path = song['file']
-    slug = re.sub(r'[^a-z0-9]+', '-', song['title'].lower())
+    slug = re.sub(r'[^a-z0-9]+', '-', song['title'].lower())[:16]
     print(slug)
     art = client.readpicture(path, 0)
     received = int(art['binary'])

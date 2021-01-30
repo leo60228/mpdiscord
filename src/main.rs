@@ -300,6 +300,7 @@ async fn run(handle: EventHandlerHandle) -> Result<!> {
                     }
                 })
                 .flatten()
+                .take(16)
                 .collect();
             if artfiles.lines().any(|x| x == slug) {
                 println!("(Cover)");
