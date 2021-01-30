@@ -23,7 +23,15 @@
       discord-game-sdk = pkgs.callPackage ./game-sdk.nix {};
       mpdiscord = naersk-lib.buildPackage {
         root = gitignoreSource ./.;
-        buildInputs = [ discord-game-sdk ];
+        nativeBuildInputs = with pkgs; [ llvmPackages.llvm ];
+        buildInputs = with pkgs; [ discord-game-sdk stdenv.cc.libc ];
+        override = x: (x // {
+          DISCORD_GAME_SDK_PATH = discord-game-sdk;
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang}/lib";
+          preConfigure = ''
+          export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.clang}/resource-root/include $NIX_CFLAGS_COMPILE"
+          '';
+        });
       };
     };
 
