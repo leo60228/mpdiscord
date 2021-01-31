@@ -1,10 +1,10 @@
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use discord_game_sdk::{Activity, CreateFlags, Discord, EventHandler, User};
-use futures::prelude::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{oneshot, watch};
+use tokio::task::LocalSet;
 
 type DiscordCallback = Box<dyn FnOnce(&Discord<'static, DiscordHandle>) + Send>;
 
@@ -129,25 +129,11 @@ where
     }
 }
 
-pub fn run_discord_thread<F1, F2>(on_connection: F1) -> impl Future<Output = Result<!>>
+pub async fn run_discord_thread<F1, F2>(on_connection: F1) -> Result<!>
 where
     F1: Fn(DiscordHandle) -> F2 + Send + 'static,
     F2: FnOnce(),
 {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
-    let thread = async_thread::spawn(move || {
-        let local = tokio::task::LocalSet::new();
-        local.block_on(&rt, run_discord(on_connection))
-    });
-
-    async move {
-        match thread.join().await {
-            Ok(x) => x,
-            Err(x) => std::panic::resume_unwind(x),
-        }
-    }
+    let local = LocalSet::new();
+    local.run_until(run_discord(on_connection)).await
 }

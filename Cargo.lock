@@ -7,15 +7,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afddf7f520a80dbf76e6f50a35bca42a2331ef227a28b3b6dc5c2e2338d114b1"
 
 [[package]]
-name = "async-thread"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f8127d0634ad2b788f12e8c8623f91c584c2eb7496157b2e0cada5b01e0fbfd"
-dependencies = [
- "futures-channel",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -452,7 +443,6 @@ name = "mpdiscord"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-thread",
  "crossbeam",
  "discord_game_sdk",
  "finally-block",
