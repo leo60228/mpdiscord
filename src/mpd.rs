@@ -12,6 +12,11 @@ pub struct Song {
 
 pub use mparsed::Status;
 
+pub struct SongStatus {
+    pub song: Song,
+    pub status: Status,
+}
+
 pub struct Mpd {
     stream: BufStream<TcpStream>,
     protocol_version: String,
@@ -71,5 +76,12 @@ impl Mpd {
 
     pub async fn idle(&mut self) -> Result<String> {
         self.raw_response(b"idle").await
+    }
+
+    pub async fn song_status(&mut self) -> Result<SongStatus> {
+        let song = self.current_song().await?;
+        let status = self.status().await?;
+
+        Ok(SongStatus { song, status })
     }
 }
