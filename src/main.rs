@@ -1,9 +1,13 @@
 #![feature(never_type)]
 
 use anyhow::Result;
+use log::*;
 use mpdiscord::{discord::run_discord_thread, run};
+use simple_logger::SimpleLogger;
 
 fn main() -> Result<!> {
+    SimpleLogger::new().init()?;
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -12,7 +16,7 @@ fn main() -> Result<!> {
         let rt_handle = rt.handle().clone();
 
         let discord = run_discord_thread(move |handle| {
-            println!("connected");
+            info!("connected to discord");
 
             let fut = async move {
                 run(handle).await.unwrap();

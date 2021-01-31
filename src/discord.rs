@@ -1,6 +1,7 @@
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use discord_game_sdk::{Activity, CreateFlags, Discord, EventHandler, User};
+use log::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{oneshot, watch};
@@ -101,7 +102,7 @@ where
         ) {
             Ok(x) => x,
             Err(discord_game_sdk::Error::Internal) => {
-                println!("couldn't connect, retrying...");
+                warn!("couldn't connect, retrying...");
                 tokio::time::sleep(Duration::from_millis(1000)).await;
                 continue 'reconnect;
             }
@@ -115,7 +116,7 @@ where
             match client.run_callbacks() {
                 Ok(()) => (),
                 Err(discord_game_sdk::Error::NotRunning) => {
-                    println!("disconnected, reconnecting...");
+                    warn!("disconnected, reconnecting...");
                     continue 'reconnect;
                 }
                 Err(e) => return Err(e.into()),
