@@ -15,6 +15,14 @@ pub struct DiscordHandle {
     queue: Arc<SegQueue<DiscordCallback>>,
 }
 
+pub struct Responder<O>(oneshot::Sender<O>);
+
+impl<O> Responder<O> {
+    pub fn finish(self, val: O) {
+        assert!(self.0.send(val).is_ok(), "failed to send response");
+    }
+}
+
 impl DiscordHandle {
     pub fn new() -> Self {
         let (user_tx, user_rx) = watch::channel(None);
@@ -39,29 +47,25 @@ impl DiscordHandle {
 
     pub async fn with<C, O>(&self, callback: C) -> O
     where
-        C: FnOnce(&Discord<'static, DiscordHandle>) -> O + Send + 'static,
+        C: FnOnce(&Discord<'static, DiscordHandle>, Responder<O>) + Send + 'static,
         O: Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
 
         self.queue.push(Box::new(move |discord| {
-            assert!(tx.send(callback(discord)).is_ok(), "failed to send");
+            callback(discord, Responder(tx));
         }));
 
         rx.await.unwrap()
     }
 
     pub async fn update_activity(&self, activity: Activity) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-
-        self.with(move |discord| {
-            discord.update_activity(&activity, |_, res| {
-                tx.send(res).unwrap();
+        self.with(move |discord, resp| {
+            discord.update_activity(&activity, move |_, res| {
+                resp.finish(res);
             });
         })
-        .await;
-
-        rx.await.unwrap()?;
+        .await?;
 
         Ok(())
     }
