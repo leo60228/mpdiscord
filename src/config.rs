@@ -7,6 +7,7 @@ use tokio::fs;
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub artfiles: Vec<String>,
+    pub discord_client_id: i64,
 }
 
 pub async fn read_config(path: impl AsRef<Path>) -> Result<Arc<Config>> {

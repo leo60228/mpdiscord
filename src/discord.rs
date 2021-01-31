@@ -86,9 +86,7 @@ impl EventHandler for DiscordHandle {
     }
 }
 
-const CLIENT_ID: i64 = 804763079581761556;
-
-async fn run_discord<F1, F2>(on_connection: F1) -> Result<!>
+async fn run_discord<F1, F2>(on_connection: F1, client_id: i64) -> Result<!>
 where
     F1: Fn(DiscordHandle) -> F2,
     F2: FnOnce(),
@@ -97,7 +95,7 @@ where
         let handle = DiscordHandle::new();
 
         let mut client = match Discord::<DiscordHandle>::with_create_flags(
-            CLIENT_ID,
+            client_id,
             CreateFlags::NoRequireDiscord,
         ) {
             Ok(x) => x,
@@ -130,11 +128,11 @@ where
     }
 }
 
-pub async fn run_discord_thread<F1, F2>(on_connection: F1) -> Result<!>
+pub async fn run_discord_thread<F1, F2>(on_connection: F1, client_id: i64) -> Result<!>
 where
     F1: Fn(DiscordHandle) -> F2 + Send + 'static,
     F2: FnOnce(),
 {
     let local = LocalSet::new();
-    local.run_until(run_discord(on_connection)).await
+    local.run_until(run_discord(on_connection, client_id)).await
 }

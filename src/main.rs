@@ -14,16 +14,21 @@ async fn main() -> Result<!> {
     let config_path = args_os().nth(1).context("Missing configuration path!")?;
     let config = read_config(&config_path).await?;
 
-    run_discord_thread(move |handle| {
-        info!("connected to discord");
+    let discord_client_id = config.discord_client_id;
 
-        let config = config.clone();
+    run_discord_thread(
+        move |handle| {
+            info!("connected to discord");
 
-        let fut = async move {
-            run(handle, config).await.unwrap();
-        };
-        let fut_handle = task::spawn(fut);
-        move || fut_handle.abort()
-    })
+            let config = config.clone();
+
+            let fut = async move {
+                run(handle, config).await.unwrap();
+            };
+            let fut_handle = task::spawn(fut);
+            move || fut_handle.abort()
+        },
+        discord_client_id,
+    )
     .await
 }
