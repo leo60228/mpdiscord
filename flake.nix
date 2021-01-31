@@ -23,8 +23,8 @@
       discord-game-sdk = pkgs.callPackage ./game-sdk.nix {};
       mpdiscord = naersk-lib.buildPackage {
         root = gitignoreSource ./.;
-        nativeBuildInputs = with pkgs; [ llvmPackages.llvm ];
-        buildInputs = with pkgs; [ discord-game-sdk stdenv.cc.libc ];
+        nativeBuildInputs = with pkgs; [ llvmPackages.llvm pkgconfig ];
+        buildInputs = with pkgs; [ discord-game-sdk stdenv.cc.libc openssl ];
         override = x: (x // {
           DISCORD_GAME_SDK_PATH = discord-game-sdk;
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang}/lib";
