@@ -1,7 +1,7 @@
 #![feature(never_type, type_alias_impl_trait, or_patterns)]
 
 use anyhow::{Context, Result};
-use discord::EventHandlerHandle;
+use discord::DiscordHandle;
 use discord_game_sdk::Activity;
 use serde::Deserialize;
 use std::fmt::Write;
@@ -11,7 +11,7 @@ use tokio::net::TcpStream;
 
 pub mod discord;
 
-pub async fn run(handle: EventHandlerHandle) -> Result<!> {
+pub async fn run(handle: DiscordHandle) -> Result<!> {
     let user = handle.user().await?;
     println!("logged in as {:#?}", user);
 

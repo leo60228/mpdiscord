@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio::sync::{oneshot, watch};
 
 #[derive(Clone)]
-pub struct EventHandlerHandle {
+pub struct DiscordHandle {
     user_tx: Arc<watch::Sender<Option<User>>>,
     user_rx: watch::Receiver<Option<User>>,
     queue: Arc<SegQueue<FullyErasedCallback>>,
@@ -18,7 +18,7 @@ pub struct EventHandlerHandle {
 trait ErasedDiscordCallback<'a> {
     fn call_once_async(
         self,
-        discord: &'a Discord<'static, EventHandlerHandle>,
+        discord: &'a Discord<'static, DiscordHandle>,
     ) -> Pin<Box<dyn Future<Output = ()> + 'a>>;
 }
 
@@ -34,7 +34,7 @@ where
 {
     fn call_once_async(
         self,
-        discord: &'a Discord<'static, EventHandlerHandle>,
+        discord: &'a Discord<'static, DiscordHandle>,
     ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
         let tx = self.tx;
         let fut = self.callback.call_once_async(discord);
@@ -47,14 +47,14 @@ where
 trait ErasedDiscordCallbackEraser<'a> {
     fn call_box_async(
         self: Box<Self>,
-        discord: &'a Discord<'static, EventHandlerHandle>,
+        discord: &'a Discord<'static, DiscordHandle>,
     ) -> Pin<Box<dyn Future<Output = ()> + 'a>>;
 }
 
 impl<'a, T: ErasedDiscordCallback<'a>> ErasedDiscordCallbackEraser<'a> for T {
     fn call_box_async(
         self: Box<Self>,
-        discord: &'a Discord<'static, EventHandlerHandle>,
+        discord: &'a Discord<'static, DiscordHandle>,
     ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
         self.call_once_async(discord)
     }
@@ -66,19 +66,19 @@ pub trait DiscordCallback<'a> {
     type Future: Future<Output = Self::Output> + 'a;
     type Output: Send + 'static;
 
-    fn call_once_async(self, discord: &'a Discord<'static, EventHandlerHandle>) -> Self::Future;
+    fn call_once_async(self, discord: &'a Discord<'static, DiscordHandle>) -> Self::Future;
 }
 
 impl<'a, F, Fut> DiscordCallback<'a> for F
 where
-    F: FnOnce(&'a Discord<'static, EventHandlerHandle>) -> Fut,
+    F: FnOnce(&'a Discord<'static, DiscordHandle>) -> Fut,
     Fut: Future + 'a,
     Fut::Output: Send + 'static,
 {
     type Future = Fut;
     type Output = Fut::Output;
 
-    fn call_once_async(self, discord: &'a Discord<'static, EventHandlerHandle>) -> Self::Future {
+    fn call_once_async(self, discord: &'a Discord<'static, DiscordHandle>) -> Self::Future {
         self(discord)
     }
 }
@@ -91,17 +91,17 @@ macro_rules! with_closure {
 
             fn dummy<F>(f: F) -> F
             where
-                F: for<'a> FnOnce(&'a Discord<'static, EventHandlerHandle>) -> CallbackFut<'a>,
+                F: for<'a> FnOnce(&'a Discord<'static, DiscordHandle>) -> CallbackFut<'a>,
             {
                 f
             }
 
-            dummy($($move)? |$discord: &Discord<'static, EventHandlerHandle>| async move { $($body)* })
+            dummy($($move)? |$discord: &Discord<'static, DiscordHandle>| async move { $($body)* })
         }
     }
 }
 
-impl EventHandlerHandle {
+impl DiscordHandle {
     pub fn new() -> Self {
         let (user_tx, user_rx) = watch::channel(None);
         Self {
@@ -151,13 +151,13 @@ impl EventHandlerHandle {
     }
 }
 
-impl Default for EventHandlerHandle {
+impl Default for DiscordHandle {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl EventHandler for EventHandlerHandle {
+impl EventHandler for DiscordHandle {
     fn on_current_user_update(&mut self, discord: &Discord<Self>) {
         self.user_tx
             .send(Some(discord.current_user().unwrap()))
@@ -169,13 +169,13 @@ const CLIENT_ID: i64 = 804763079581761556;
 
 async fn run_discord<F1, F2>(on_connection: F1) -> Result<!>
 where
-    F1: Fn(EventHandlerHandle) -> F2,
+    F1: Fn(DiscordHandle) -> F2,
     F2: FnOnce(),
 {
     'reconnect: loop {
-        let handle = EventHandlerHandle::new();
+        let handle = DiscordHandle::new();
 
-        let mut client = match Discord::<EventHandlerHandle>::with_create_flags(
+        let mut client = match Discord::<DiscordHandle>::with_create_flags(
             CLIENT_ID,
             CreateFlags::NoRequireDiscord,
         ) {
@@ -213,7 +213,7 @@ where
 
 pub fn run_discord_thread<F1, F2>(on_connection: F1) -> impl Future<Output = Result<!>>
 where
-    F1: Fn(EventHandlerHandle) -> F2 + Send + 'static,
+    F1: Fn(DiscordHandle) -> F2 + Send + 'static,
     F2: FnOnce(),
 {
     let rt = tokio::runtime::Builder::new_current_thread()
