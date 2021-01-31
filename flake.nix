@@ -36,5 +36,6 @@
     };
 
     defaultPackage.x86_64-linux = packages.x86_64-linux.mpdiscord;
+    devShell.x86_64-linux = builtins.head packages.x86_64-linux.mpdiscord.builtDependencies;
   };
 }
