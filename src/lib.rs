@@ -1,4 +1,4 @@
-#![feature(never_type, type_alias_impl_trait, or_patterns)]
+#![feature(never_type)]
 
 use anyhow::{Context, Result};
 use discord::DiscordHandle;
