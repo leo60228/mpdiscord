@@ -8,6 +8,7 @@ use tokio::fs;
 pub struct Config {
     pub artfiles: Vec<String>,
     pub discord_client_id: i64,
+    pub mastodon_token: String,
 }
 
 pub async fn read_config(path: impl AsRef<Path>) -> Result<Arc<Config>> {

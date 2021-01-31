@@ -5,6 +5,7 @@ use log::*;
 use tokio::sync::broadcast::error::RecvError;
 
 pub mod discord;
+pub mod mastodon;
 
 async fn safe_recv(rx: &mut StatusRx) -> Result<SongStatus> {
     loop {
