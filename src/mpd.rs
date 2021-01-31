@@ -3,7 +3,7 @@ use serde::{de::DeserializeOwned, Deserialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Song {
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -12,6 +12,7 @@ pub struct Song {
 
 pub use mparsed::Status;
 
+#[derive(Clone, Debug)]
 pub struct SongStatus {
     pub song: Song,
     pub status: Status,

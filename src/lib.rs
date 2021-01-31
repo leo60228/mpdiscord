@@ -5,8 +5,9 @@ use config::Config;
 use conversions::get_activity;
 use discord::DiscordHandle;
 use log::*;
-use mpd::Mpd;
+use mpd::{Mpd, SongStatus};
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tokio::task;
 
 pub mod config;
@@ -14,10 +15,65 @@ mod conversions;
 pub mod discord;
 pub mod mpd;
 
-pub async fn run_discord(handle: DiscordHandle, config: Arc<Config>) -> Result<!> {
+type StatusTx = broadcast::Sender<SongStatus>;
+type StatusRx = broadcast::Receiver<SongStatus>;
+
+async fn safe_recv(rx: &mut StatusRx) -> Result<SongStatus> {
+    loop {
+        match rx.recv().await {
+            Ok(x) => break Ok(x),
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                warn!("updater lagged behind mpd");
+                continue;
+            }
+            Err(x) => break Err(x.into()),
+        }
+    }
+}
+
+async fn discord_updater(
+    handle: DiscordHandle,
+    config: Arc<Config>,
+    mut rx: StatusRx,
+) -> Result<!> {
     let user = handle.user().await?;
     info!("logged in as @{}#{}", user.username(), user.discriminator());
 
+    loop {
+        trace!("getting status");
+        let song_status = safe_recv(&mut rx).await?;
+
+        let activity = get_activity(&song_status, &config)?;
+
+        trace!("updating activity");
+        handle.update_activity(activity).await?;
+        info!("updated activity");
+    }
+}
+
+async fn run_discord_updater(config: Arc<Config>, tx: StatusTx) -> Result<!> {
+    let discord_client_id = config.discord_client_id;
+
+    let discord_thread = discord::run_discord_thread(
+        move |handle| {
+            info!("connected to discord");
+
+            let config = config.clone();
+            let rx = tx.subscribe();
+
+            let fut = async move {
+                discord_updater(handle, config, rx).await.unwrap();
+            };
+            let fut_handle = task::spawn(fut);
+            move || fut_handle.abort()
+        },
+        discord_client_id,
+    );
+
+    discord_thread.await
+}
+
+async fn mpd_watcher(tx: broadcast::Sender<SongStatus>) -> Result<!> {
     trace!("connecting to mpd");
     let mut mpd = Mpd::new().await?;
 
@@ -27,34 +83,22 @@ pub async fn run_discord(handle: DiscordHandle, config: Arc<Config>) -> Result<!
         trace!("getting status");
         let song_status = mpd.song_status().await?;
 
-        let activity = get_activity(&song_status, &config)?;
+        trace!("sending status");
+        tx.send(song_status)?;
 
-        trace!("updating activity");
-
-        handle.update_activity(activity).await?;
-
-        info!("updated activity, idling");
-
+        info!("sent status, idling");
         mpd.idle().await?;
     }
 }
 
 pub async fn run(config: Arc<Config>) -> Result<!> {
-    let discord_client_id = config.discord_client_id;
+    let (tx, _rx) = broadcast::channel(2);
 
-    discord::run_discord_thread(
-        move |handle| {
-            info!("connected to discord");
+    let mpd_watch = mpd_watcher(tx.clone());
+    let discord_thread = run_discord_updater(config.clone(), tx);
 
-            let config = config.clone();
-
-            let fut = async move {
-                run_discord(handle, config).await.unwrap();
-            };
-            let fut_handle = task::spawn(fut);
-            move || fut_handle.abort()
-        },
-        discord_client_id,
-    )
-    .await
+    tokio::select! {
+        mpd_error = mpd_watch => mpd_error,
+        discord_err = discord_thread => discord_err,
+    }
 }
