@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use futures::prelude::*;
-use mpdiscord::{run, run_discord_thread};
+use mpdiscord::{discord::run_discord_thread, run};
 
 fn main() -> Result<!> {
     let rt = tokio::runtime::Builder::new_multi_thread()
