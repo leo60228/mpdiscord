@@ -1,4 +1,4 @@
 /target
-artfiles.txt
+config.toml
 artfiles/
 .direnv

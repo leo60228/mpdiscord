@@ -2,16 +2,20 @@
 import musicpd
 import re
 import mimetypes
+import toml
 from PIL import Image
 from io import BytesIO
 
 client = musicpd.MPDClient()
 client.connect()
 
+artfiles = []
+
 for song in client.playlistinfo():
     path = song['file']
     slug = re.sub(r'[^a-z0-9]+', '-', song['title'].lower())[:16]
     print(slug)
+    artfiles.append(slug)
     art = client.readpicture(path, 0)
     received = int(art['binary'])
     size = int(art['size'])
@@ -39,3 +43,6 @@ for song in client.playlistinfo():
     scaled.save(f'artfiles/{slug}{ext}')
 
 client.disconnect()
+
+with open('config.toml', 'w') as f:
+    toml.dump({ 'artfiles': artfiles }, f)
