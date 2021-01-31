@@ -5,18 +5,19 @@ use config::Config;
 use conversions::get_activity;
 use discord::DiscordHandle;
 use log::*;
-use mpd::{Mpd, SongStatus};
+use mpd::SongStatus;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::task;
 
 pub mod config;
-mod conversions;
+pub mod conversions;
 pub mod discord;
 pub mod mpd;
+pub mod mpd_watcher;
 
-type StatusTx = broadcast::Sender<SongStatus>;
-type StatusRx = broadcast::Receiver<SongStatus>;
+pub type StatusTx = broadcast::Sender<SongStatus>;
+pub type StatusRx = broadcast::Receiver<SongStatus>;
 
 async fn safe_recv(rx: &mut StatusRx) -> Result<SongStatus> {
     loop {
@@ -73,28 +74,10 @@ async fn run_discord_updater(config: Arc<Config>, tx: StatusTx) -> Result<!> {
     discord_thread.await
 }
 
-async fn mpd_watcher(tx: broadcast::Sender<SongStatus>) -> Result<!> {
-    trace!("connecting to mpd");
-    let mut mpd = Mpd::new().await?;
-
-    info!("connected to mpd {}", mpd.protocol_version());
-
-    loop {
-        trace!("getting status");
-        let song_status = mpd.song_status().await?;
-
-        trace!("sending status");
-        tx.send(song_status)?;
-
-        info!("sent status, idling");
-        mpd.idle().await?;
-    }
-}
-
 pub async fn run(config: Arc<Config>) -> Result<!> {
     let (tx, _rx) = broadcast::channel(2);
 
-    let mpd_watch = mpd_watcher(tx.clone());
+    let mpd_watch = mpd_watcher::mpd_watcher(tx.clone());
     let discord_thread = run_discord_updater(config.clone(), tx);
 
     tokio::select! {
