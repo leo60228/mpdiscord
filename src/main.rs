@@ -1,7 +1,6 @@
 #![feature(never_type)]
 
 use anyhow::Result;
-use futures::prelude::*;
 use mpdiscord::{discord::run_discord_thread, run};
 
 fn main() -> Result<!> {
@@ -15,10 +14,10 @@ fn main() -> Result<!> {
         let discord = run_discord_thread(move |handle| {
             println!("connected");
 
-            let (fut, fut_handle) = future::abortable(async move {
+            let fut = async move {
                 run(handle).await.unwrap();
-            });
-            rt_handle.spawn(fut);
+            };
+            let fut_handle = rt_handle.spawn(fut);
             move || fut_handle.abort()
         });
 
