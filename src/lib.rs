@@ -3,53 +3,48 @@
 use anyhow::{Context, Result};
 use discord::DiscordHandle;
 use discord_game_sdk::Activity;
-use serde::Deserialize;
+use mpd::Mpd;
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufStream};
-use tokio::net::TcpStream;
 
 pub mod discord;
+pub mod mpd;
+
+fn slugify(title: &str) -> String {
+    title
+        .chars()
+        .scan(false, |state, x| {
+            if x.is_ascii_alphanumeric() {
+                *state = false;
+                Some(Some(x.to_ascii_lowercase()))
+            } else if *state {
+                Some(None)
+            } else {
+                *state = true;
+                Some(Some('-'))
+            }
+        })
+        .flatten()
+        .take(16)
+        .collect()
+}
 
 pub async fn run(handle: DiscordHandle) -> Result<!> {
     let user = handle.user().await?;
     println!("logged in as {:#?}", user);
 
-    let mut stream = BufStream::new(TcpStream::connect("localhost:6600").await?);
     let artfiles_path = std::env::args_os().nth(1).context("missing path")?;
     let artfiles = tokio::fs::read_to_string(artfiles_path).await?;
 
-    #[derive(Deserialize)]
-    struct Song {
-        title: Option<String>,
-        artist: Option<String>,
-        album: Option<String>,
-    }
+    let mut mpd = Mpd::new().await?;
 
-    let mut connect_resp = String::new();
-    stream.read_line(&mut connect_resp).await?;
-    print!("connected, {}", connect_resp);
+    print!("connected to mpd {}", mpd.protocol_version());
 
     loop {
         let time = SystemTime::now();
-        println!("getting status");
-        stream.write_all(b"status\n").await?;
-        stream.flush().await?;
-        let mut status_resp = String::new();
-        while status_resp.trim().lines().last() != Some("OK") {
-            stream.read_line(&mut status_resp).await?;
-        }
-        let status: mparsed::Status = mparsed::parse_response(status_resp.lines())?;
 
-        println!("getting song");
-        stream.write_all(b"currentsong\n").await?;
-        stream.flush().await?;
-        let mut song_resp = String::new();
-        while song_resp.trim().lines().last() != Some("OK") {
-            stream.read_line(&mut song_resp).await?;
-        }
-        let song: Song = mparsed::parse_response(song_resp.lines())?;
-        println!("got song");
+        let status = mpd.status().await?;
+        let song = mpd.current_song().await?;
 
         let mut activity = Activity::empty();
 
@@ -57,22 +52,7 @@ pub async fn run(handle: DiscordHandle) -> Result<!> {
             println!("{}", title);
             activity.with_details(title);
 
-            let slug: String = title
-                .chars()
-                .scan(false, |state, x| {
-                    if x.is_ascii_alphanumeric() {
-                        *state = false;
-                        Some(Some(x.to_ascii_lowercase()))
-                    } else if *state {
-                        Some(None)
-                    } else {
-                        *state = true;
-                        Some(Some('-'))
-                    }
-                })
-                .flatten()
-                .take(16)
-                .collect();
+            let slug = slugify(&title);
             if artfiles.lines().any(|x| x == slug) {
                 println!("(Cover)");
                 activity.with_large_image_key(&slug);
@@ -106,11 +86,6 @@ pub async fn run(handle: DiscordHandle) -> Result<!> {
 
         handle.update_activity(activity).await?;
 
-        stream.write_all(b"idle\n").await?;
-        stream.flush().await?;
-        let mut idle_resp = String::new();
-        while idle_resp.trim().lines().last() != Some("OK") {
-            stream.read_line(&mut idle_resp).await?;
-        }
+        mpd.idle().await?;
     }
 }
