@@ -1,13 +1,16 @@
 #![feature(never_type)]
 
-use anyhow::{Context, Result};
+use anyhow::Result;
+use config::Config;
 use discord::DiscordHandle;
 use discord_game_sdk::Activity;
 use log::*;
 use mpd::Mpd;
 use std::fmt::Write;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod config;
 pub mod discord;
 pub mod mpd;
 
@@ -30,12 +33,9 @@ fn slugify(title: &str) -> String {
         .collect()
 }
 
-pub async fn run(handle: DiscordHandle) -> Result<!> {
+pub async fn run(handle: DiscordHandle, config: Arc<Config>) -> Result<!> {
     let user = handle.user().await?;
     info!("logged in as @{}#{}", user.username(), user.discriminator());
-
-    let artfiles_path = std::env::args_os().nth(1).context("missing path")?;
-    let artfiles = tokio::fs::read_to_string(artfiles_path).await?;
 
     trace!("connecting to mpd");
     let mut mpd = Mpd::new().await?;
@@ -59,7 +59,7 @@ pub async fn run(handle: DiscordHandle) -> Result<!> {
             activity.with_details(title);
 
             let slug = slugify(&title);
-            if artfiles.lines().any(|x| x == slug) {
+            if config.artfiles.contains(&slug) {
                 debug!("(Cover)");
                 activity.with_large_image_key(&slug);
                 activity.with_large_image_tooltip(&title);
