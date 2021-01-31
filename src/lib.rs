@@ -9,6 +9,7 @@ use tokio::sync::broadcast;
 pub mod config;
 pub mod conversions;
 pub mod discord;
+pub mod mastodon;
 pub mod mpd;
 pub mod mpd_watcher;
 pub mod updaters;
