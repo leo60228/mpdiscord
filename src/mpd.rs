@@ -45,6 +45,7 @@ impl Mpd {
     pub async fn raw_response(&mut self, command: &[u8]) -> Result<String> {
         self.stream.write_all(command).await?;
         self.stream.write_u8(b'\n').await?;
+        self.stream.flush().await?;
 
         let mut response = String::new();
         while response.trim().lines().last() != Some("OK") {
