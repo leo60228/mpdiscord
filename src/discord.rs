@@ -2,103 +2,17 @@ use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use discord_game_sdk::{Activity, CreateFlags, Discord, EventHandler, User};
 use futures::prelude::*;
-use futures::stream::FuturesUnordered;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{oneshot, watch};
+
+type DiscordCallback = Box<dyn FnOnce(&Discord<'static, DiscordHandle>) + Send>;
 
 #[derive(Clone)]
 pub struct DiscordHandle {
     user_tx: Arc<watch::Sender<Option<User>>>,
     user_rx: watch::Receiver<Option<User>>,
-    queue: Arc<SegQueue<FullyErasedCallback>>,
-}
-
-trait ErasedDiscordCallback<'a> {
-    fn call_once_async(
-        self,
-        discord: &'a Discord<'static, DiscordHandle>,
-    ) -> Pin<Box<dyn Future<Output = ()> + 'a>>;
-}
-
-struct DiscordCallbackEraser<T: for<'a> DiscordCallback<'a, Output = O>, O> {
-    callback: T,
-    tx: oneshot::Sender<O>,
-}
-
-impl<'a, T, O> ErasedDiscordCallback<'a> for DiscordCallbackEraser<T, O>
-where
-    T: for<'b> DiscordCallback<'b, Output = O> + 'static,
-    O: Send + 'static,
-{
-    fn call_once_async(
-        self,
-        discord: &'a Discord<'static, DiscordHandle>,
-    ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
-        let tx = self.tx;
-        let fut = self.callback.call_once_async(discord);
-        Box::pin(async move {
-            assert!(tx.send(fut.await).is_ok());
-        })
-    }
-}
-
-trait ErasedDiscordCallbackEraser<'a> {
-    fn call_box_async(
-        self: Box<Self>,
-        discord: &'a Discord<'static, DiscordHandle>,
-    ) -> Pin<Box<dyn Future<Output = ()> + 'a>>;
-}
-
-impl<'a, T: ErasedDiscordCallback<'a>> ErasedDiscordCallbackEraser<'a> for T {
-    fn call_box_async(
-        self: Box<Self>,
-        discord: &'a Discord<'static, DiscordHandle>,
-    ) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
-        self.call_once_async(discord)
-    }
-}
-
-type FullyErasedCallback = Box<dyn for<'a> ErasedDiscordCallbackEraser<'a> + Send + Sync>;
-
-pub trait DiscordCallback<'a> {
-    type Future: Future<Output = Self::Output> + 'a;
-    type Output: Send + 'static;
-
-    fn call_once_async(self, discord: &'a Discord<'static, DiscordHandle>) -> Self::Future;
-}
-
-impl<'a, F, Fut> DiscordCallback<'a> for F
-where
-    F: FnOnce(&'a Discord<'static, DiscordHandle>) -> Fut,
-    Fut: Future + 'a,
-    Fut::Output: Send + 'static,
-{
-    type Future = Fut;
-    type Output = Fut::Output;
-
-    fn call_once_async(self, discord: &'a Discord<'static, DiscordHandle>) -> Self::Future {
-        self(discord)
-    }
-}
-
-#[macro_export]
-macro_rules! with_closure {
-    ($($move:ident)? |$discord:pat| -> $res:ty { $($body:tt)* }) => {
-        {
-            type CallbackFut<'a> = impl Future<Output = $res>;
-
-            fn dummy<F>(f: F) -> F
-            where
-                F: for<'a> FnOnce(&'a Discord<'static, DiscordHandle>) -> CallbackFut<'a>,
-            {
-                f
-            }
-
-            dummy($($move)? |$discord: &Discord<'static, DiscordHandle>| async move { $($body)* })
-        }
-    }
+    queue: Arc<SegQueue<DiscordCallback>>,
 }
 
 impl DiscordHandle {
@@ -125,24 +39,26 @@ impl DiscordHandle {
 
     pub async fn with<C, O>(&self, callback: C) -> O
     where
-        C: for<'a> DiscordCallback<'a, Output = O> + Send + Sync + 'static,
+        C: FnOnce(&Discord<'static, DiscordHandle>) -> O + Send + 'static,
         O: Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
 
-        self.queue
-            .push(Box::new(DiscordCallbackEraser { callback, tx }));
+        self.queue.push(Box::new(move |discord| {
+            assert!(tx.send(callback(discord)).is_ok(), "failed to send");
+        }));
+
         rx.await.unwrap()
     }
 
     pub async fn update_activity(&self, activity: Activity) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
-        self.with(with_closure!(move |discord| -> () {
+        self.with(move |discord| {
             discord.update_activity(&activity, |_, res| {
                 tx.send(res).unwrap();
             });
-        }))
+        })
         .await;
 
         rx.await.unwrap()?;
@@ -201,11 +117,9 @@ where
                 Err(e) => return Err(e.into()),
             }
 
-            let futures = FuturesUnordered::new();
             while let Some(callback) = handle.queue.pop() {
-                futures.push(callback.call_box_async(&client));
+                callback(&client);
             }
-            futures.collect::<()>().await;
             tokio::task::yield_now().await;
         }
     }
