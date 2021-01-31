@@ -1,10 +1,10 @@
 use super::safe_recv;
 use crate::config::Config;
+use crate::conversions;
 use crate::mastodon::Mastodon;
 use crate::StatusRx;
 use anyhow::Result;
 use log::*;
-use std::fmt::Write;
 use std::sync::Arc;
 
 pub async fn mastodon_updater(config: Arc<Config>, mut rx: StatusRx) -> Result<!> {
@@ -17,7 +17,7 @@ pub async fn mastodon_updater(config: Arc<Config>, mut rx: StatusRx) -> Result<!
         trace!("getting status");
         let song_status = safe_recv(&mut rx).await?;
 
-        if let (Some(title), Some(artist)) = (&song_status.song.title, &song_status.song.artist) {
+        if let Some(notice) = conversions::get_text(&song_status) {
             trace!("getting mastodon account");
             let account = mastodon.account().await?;
 
@@ -27,11 +27,6 @@ pub async fn mastodon_updater(config: Arc<Config>, mut rx: StatusRx) -> Result<!
                 .rsplitn(2, "\n\nLast listening to:")
                 .last()
                 .unwrap_or("");
-
-            let mut notice = format!("{} - {}", title, artist);
-            if let Some(album) = &song_status.song.album {
-                write!(notice, " (album: {})", album)?;
-            }
 
             let new_bio = format!("{}\n\nLast listening to: {}", bio, notice);
 

@@ -69,3 +69,16 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 
     Ok(activity)
 }
+
+pub fn get_text(song_status: &SongStatus) -> Option<String> {
+    if let (Some(title), Some(artist)) = (&song_status.song.title, &song_status.song.artist) {
+        let mut notice = format!("{} - {}", title, artist);
+        if let Some(album) = &song_status.song.album {
+            write!(notice, " (album: {})", album).unwrap();
+        }
+
+        Some(notice)
+    } else {
+        None
+    }
+}
