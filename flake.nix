@@ -1,6 +1,13 @@
 {
-  inputs.naersk.url = "github:nmattia/naersk";
-  inputs.rust-overlay.url = "github:oxalica/rust-overlay";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-20.09";
+  inputs.naersk = {
+    url = "github:nmattia/naersk";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+  inputs.rust-overlay = {
+    url = "github:oxalica/rust-overlay";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
   inputs.gitignore = {
     url = "github:hercules-ci/gitignore.nix";
     flake = false;
