@@ -24,9 +24,10 @@ pub async fn mastodon_updater(config: Arc<Config>, mut rx: StatusRx) -> Result<!
             let bio = account
                 .source
                 .note
-                .rsplitn(2, "\n\nLast listening to:")
-                .last()
-                .unwrap_or("");
+                .splitn(2, "Last listening to:")
+                .next()
+                .unwrap_or("")
+                .trim_end();
 
             let new_bio = format!("{}\n\nLast listening to: {}", bio, notice);
 
