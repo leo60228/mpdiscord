@@ -14,6 +14,10 @@ artfiles = []
 for song in client.playlistinfo():
     path = song['file']
     slug = re.sub(r'[^a-z0-9]+', '-', song['title'].lower())[:16]
+    if song['title'] == 'MEGALOVANIA':
+        slug = 'ut-megalovania'
+    elif song['title'] == 'MeGaLoVania':
+        slug = 'hs-megalovania'
     print(slug)
     artfiles.append(slug)
     art = client.readpicture(path, 0)

@@ -13,9 +13,6 @@ async fn discord_updater_inner(
     config: Arc<Config>,
     mut rx: StatusRx,
 ) -> Result<!> {
-    let user = handle.user().await?;
-    info!("logged in as @{}#{}", user.username(), user.discriminator());
-
     loop {
         trace!("getting status");
         let song_status = safe_recv(&mut rx).await?;
