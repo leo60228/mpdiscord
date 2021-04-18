@@ -6,7 +6,11 @@ use log::*;
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn slugify(title: &str) -> String {
+fn slugify(title: &str, config: &Config) -> String {
+    if let Some(slug) = config.art_overrides.get(title) {
+        return slug.clone();
+    }
+
     title
         .chars()
         .scan(false, |state, x| {
@@ -35,7 +39,7 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
         debug!("{}", title);
         activity.with_details(title);
 
-        let slug = slugify(&title);
+        let slug = slugify(&title, config);
         if config.artfiles.contains(&slug) {
             debug!("(Cover)");
             activity.with_large_image_key(&slug);
