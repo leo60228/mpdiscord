@@ -21,7 +21,7 @@
       };
       gitignore-lib = import gitignore { inherit (pkgs) lib; };
       inherit (gitignore-lib) gitignoreSource;
-      rust = pkgs.rust-bin.nightly.latest.rust;
+      rust = pkgs.rust-bin.nightly.latest.default;
       naersk-lib = naersk.lib.x86_64-linux.override {
         cargo = rust;
         rustc = rust;
