@@ -21,8 +21,8 @@ pub async fn run(config: Arc<Config>) -> Result<!> {
     let (tx, rx) = broadcast::channel(2);
 
     let mpd_watch = mpd_watcher::mpd_watcher(tx.clone());
-    let discord_thread = updaters::discord::discord_updater(config.clone(), tx);
-    let mastodon = updaters::mastodon::mastodon_updater(config.clone(), rx);
+    let discord_thread = updaters::discord::discord_updater(config.clone(), rx);
+    let mastodon = updaters::mastodon::mastodon_updater(config.clone(), tx.subscribe());
 
     tokio::select! {
         mpd_error = mpd_watch => mpd_error,

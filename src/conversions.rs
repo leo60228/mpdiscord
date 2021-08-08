@@ -1,7 +1,7 @@
 use super::config::Config;
 use super::mpd::SongStatus;
 use anyhow::Result;
-use discord_game_sdk::Activity;
+use discord_sdk::activity::{Activity, Assets, Timestamps};
 use log::*;
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -33,17 +33,20 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
     let time = SystemTime::now();
 
     trace!("creating Activity");
-    let mut activity = Activity::empty();
+    let mut activity = Activity::default();
 
     if let Some(title) = &song_status.song.title {
         debug!("{}", title);
-        activity.with_details(title);
+        activity.details = Some(title.to_string());
 
-        let slug = slugify(&title, config);
+        let slug = slugify(title, config);
         if config.artfiles.contains(&slug) {
             debug!("(Cover)");
-            activity.with_large_image_key(&slug);
-            activity.with_large_image_tooltip(&title);
+            activity.assets = Some(Assets {
+                large_image: Some(slug),
+                large_text: Some(title.to_string()),
+                ..Default::default()
+            });
         }
     }
 
@@ -59,7 +62,9 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 
     debug!("{}", state);
 
-    activity.with_state(&state);
+    if !state.is_empty() {
+        activity.state = Some(state);
+    }
 
     if song_status.status.state == mparsed::State::Play {
         if let Some(elapsed) = song_status.status.elapsed {
@@ -67,7 +72,10 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 
             let start = time - elapsed;
             let since_epoch = start.duration_since(UNIX_EPOCH)?;
-            activity.with_start_time(since_epoch.as_secs() as _);
+            activity.timestamps = Some(Timestamps {
+                start: Some(since_epoch.as_secs() as _),
+                end: None,
+            });
         }
     }
 

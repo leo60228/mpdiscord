@@ -1,5 +1,6 @@
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-20.09";
+  inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.naersk = {
     url = "github:nmattia/naersk";
     inputs.nixpkgs.follows = "nixpkgs";
@@ -8,41 +9,55 @@
     url = "github:oxalica/rust-overlay";
     inputs.nixpkgs.follows = "nixpkgs";
   };
-  inputs.gitignore = {
-    url = "github:hercules-ci/gitignore.nix";
-    flake = false;
-  };
 
-  outputs = { nixpkgs, rust-overlay, naersk, gitignore, ... }: rec {
-    packages.x86_64-linux = let
-      pkgs = import nixpkgs {
-        system = "x86_64-linux";
-        overlays = [ rust-overlay.overlay ];
-      };
-      gitignore-lib = import gitignore { inherit (pkgs) lib; };
-      inherit (gitignore-lib) gitignoreSource;
-      rust = pkgs.rust-bin.nightly.latest.default;
-      naersk-lib = naersk.lib.x86_64-linux.override {
-        cargo = rust;
-        rustc = rust;
-      };
-    in rec {
-      discord-game-sdk = pkgs.callPackage ./game-sdk.nix {};
-      mpdiscord = naersk-lib.buildPackage {
-        root = gitignoreSource ./.;
-        nativeBuildInputs = with pkgs; [ llvmPackages.llvm pkgconfig ];
-        buildInputs = with pkgs; [ discord-game-sdk stdenv.cc.libc openssl ];
-        override = x: (x // {
-          DISCORD_GAME_SDK_PATH = discord-game-sdk;
-          LIBCLANG_PATH = with pkgs; lib.makeLibraryPath [ llvmPackages.libclang ];
-          preConfigure = ''
-          export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.clang}/resource-root/include $NIX_CFLAGS_COMPILE"
-          '';
-        });
-      };
-    };
+  outputs = { nixpkgs, flake-utils, rust-overlay, naersk, self, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ rust-overlay.overlay naersk.overlay ];
+        };
+        rust = pkgs.rust-bin.nightly.latest.default;
+        inherit (pkgs.rust-bin.nightly.latest) cargo;
+        naersk-lib = pkgs.naersk.override {
+          inherit cargo;
+          rustc = rust;
+        };
+        rust-dev = rust.override {
+          extensions = [ "rust-src" "clippy" ];
+        };
+      in rec {
+        packages = {
+          mpdiscord = naersk-lib.buildPackage rec {
+            name = "mpdiscord";
+            version = "unstable";
+            root = ./.;
+            nativeBuildInputs = with pkgs; [ llvmPackages.llvm pkgconfig ];
+            buildInputs = with pkgs; [ stdenv.cc.libc openssl ];
+            override = x: (x // {
+              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang}/lib";
+              preConfigure = ''
+              export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.clang}/resource-root/include $NIX_CFLAGS_COMPILE"
+              '';
+            });
+            overrideMain = x: (x // rec {
+              name = "${pname}-${version}";
+              pname = "mpdiscord";
+              version =
+                let
+                  rev = self.shortRev or null;
+                in
+                  if rev != null then "unstable-${rev}" else "dirty";
+            });
+          };
+        };
 
-    defaultPackage.x86_64-linux = packages.x86_64-linux.mpdiscord;
-    devShell.x86_64-linux = builtins.head packages.x86_64-linux.mpdiscord.builtDependencies;
-  };
+        defaultPackage = packages.mpdiscord;
+
+        devShell = pkgs.mkShell {
+          inputsFrom = packages.mpdiscord.builtDependencies;
+          nativeBuildInputs = with pkgs; [ rust-dev ];
+        };
+      }
+    );
 }
