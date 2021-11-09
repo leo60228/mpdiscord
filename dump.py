@@ -1,14 +1,14 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i python3 -p python3 python3Packages.toml python3Packages.pillow
-import musicpd
+#!nix-shell -i python3 -p python3 python3Packages.mpd2 python3Packages.toml python3Packages.pillow
+import mpd
 import re
 import mimetypes
 import toml
 from PIL import Image
 from io import BytesIO
 
-client = musicpd.MPDClient()
-client.connect()
+client = mpd.MPDClient()
+client.connect("localhost", 6600)
 
 artfiles = []
 
@@ -21,23 +21,13 @@ for song in client.playlistinfo():
         slug = 'hs-megalovania'
     print(slug)
     artfiles.append(slug)
-    art = client.readpicture(path, 0)
-    received = int(art['binary'])
-    size = int(art['size'])
+    art = client.readpicture(path)
     ext = ".jpg"
     if art['type']:
         guessed = mimetypes.guess_extension(art['type'])
         if guessed:
             ext = guessed
-    cover = bytearray()
-    cover.extend(art.get('data'))
-    while received < size:
-        art = client.readpicture(path, received)
-        cover.extend(art['data'])
-        received += int(art['binary'])
-    if received != size:
-        print("mismatched size")
-        break
+    cover = art['binary']
     cover_image = Image.open(BytesIO(cover))
     (orig_width, orig_height) = cover_image.size
     (width, height) = (orig_width, orig_height)
