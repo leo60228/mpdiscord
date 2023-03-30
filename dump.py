@@ -34,7 +34,7 @@ for song in client.playlistinfo():
     while width < 512 or height < 512:
         width += orig_width
         height += orig_height
-    scaled = cover_image.resize((width, height), resample=Image.NEAREST)
+    scaled = cover_image.resize((width, height), resample=Image.Resampling.NEAREST)
     scaled.save(f'artfiles/{slug}{ext}')
 
 client.disconnect()

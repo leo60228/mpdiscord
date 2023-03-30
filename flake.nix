@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-20.09";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.naersk = {
     url = "github:nmattia/naersk";
@@ -15,7 +15,7 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ rust-overlay.overlay naersk.overlay ];
+          overlays = [ rust-overlay.overlays.default naersk.overlay ];
         };
         rust = pkgs.rust-bin.nightly.latest.default;
         inherit (pkgs.rust-bin.nightly.latest) cargo;
