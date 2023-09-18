@@ -32,7 +32,7 @@
             name = "mpdiscord";
             version = "unstable";
             root = ./.;
-            nativeBuildInputs = with pkgs; [ llvmPackages.llvm pkgconfig ];
+            nativeBuildInputs = with pkgs; [ llvmPackages.llvm pkg-config ];
             buildInputs = with pkgs; [ stdenv.cc.libc openssl ];
             override = x: (x // {
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang}/lib";
