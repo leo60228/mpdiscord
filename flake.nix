@@ -37,7 +37,7 @@
             buildInputs = with pkgs; [ stdenv.cc.libc openssl ];
             override = x: (x // {
               DISCORD_GAME_SDK_PATH = discord-game-sdk;
-              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang}/lib";
+              LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
               preConfigure = ''
               export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.clang}/resource-root/include $NIX_CFLAGS_COMPILE"
               '';
