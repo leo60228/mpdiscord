@@ -1,159 +1,138 @@
-use anyhow::{bail, Result};
-use discord_sdk::{
-    activity::{Activity, ActivityArgs},
-    user::{events::ConnectEvent, User},
-    Discord, DiscordHandler, DiscordMsg, Event, Subscriptions,
-};
+use anyhow::Result;
+use crossbeam::queue::SegQueue;
+use discord_game_sdk::{Activity, CreateFlags, Discord, EventHandler, User};
 use log::*;
-use std::ops::Deref;
 use std::sync::Arc;
-use tokio::sync::oneshot::{channel, Sender};
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
+use std::time::Duration;
+use tokio::sync::{oneshot, watch};
+use tokio::task::LocalSet;
 
-struct EventHandler {
-    sender: Mutex<Option<Sender<Result<User>>>>,
-    state: Arc<RwLock<State>>,
-}
+type DiscordCallback = Box<dyn FnOnce(&Discord<'static, DiscordHandle>) + Send>;
 
-#[async_trait::async_trait]
-impl DiscordHandler for EventHandler {
-    async fn on_message(&self, msg: DiscordMsg) {
-        match msg {
-            DiscordMsg::Event(Event::Ready(ConnectEvent { user, .. })) => {
-                trace!("ready");
-
-                let mut sender = self.sender.lock().await;
-
-                if let Some(sender) = sender.take() {
-                    trace!("took sender");
-                    if sender.send(Ok(user)).is_err() {
-                        warn!("couldn't send user");
-                    }
-                }
-            }
-            DiscordMsg::Event(Event::Disconnected { reason }) => {
-                info!("disconnected");
-
-                let mut sender = self.sender.lock().await;
-
-                if let Some(sender) = sender.take() {
-                    warn!("disconnected while connecting");
-                    if sender.send(Err(reason.into())).is_err() {
-                        warn!("couldn't send error");
-                    }
-                } else {
-                    *self.state.write().await = State::Disconnected;
-                }
-            }
-            DiscordMsg::Event(event) => {
-                trace!("event: {:?}", event);
-            }
-            DiscordMsg::Error(err) => {
-                error!("discord error: {}", err);
-
-                let mut sender = self.sender.lock().await;
-
-                if let Some(sender) = sender.take() {
-                    trace!("took sender");
-                    if sender.send(Err(err.into())).is_err() {
-                        warn!("couldn't send error");
-                    }
-                } else {
-                    *self.state.write().await = State::Error(Some(err));
-                }
-            }
-        }
-    }
-}
-
-struct Connection {
-    pub discord: Discord,
-    pub user: User,
-}
-
-enum State {
-    Disconnected,
-    Connected(Connection),
-    Error(Option<discord_sdk::Error>),
-}
-
+#[derive(Clone)]
 pub struct DiscordHandle {
-    client_id: i64,
-    state: Arc<RwLock<State>>,
+    user_tx: Arc<watch::Sender<Option<User>>>,
+    user_rx: watch::Receiver<Option<User>>,
+    queue: Arc<SegQueue<DiscordCallback>>,
+}
+
+pub struct Responder<O>(oneshot::Sender<O>);
+
+impl<O> Responder<O> {
+    pub fn finish(self, val: O) {
+        assert!(self.0.send(val).is_ok(), "failed to send response");
+    }
 }
 
 impl DiscordHandle {
-    pub fn new(client_id: i64) -> Self {
+    pub fn new() -> Self {
+        let (user_tx, user_rx) = watch::channel(None);
         Self {
-            client_id,
-            state: Arc::new(RwLock::new(State::Disconnected)),
+            user_tx: Arc::new(user_tx),
+            user_rx,
+            queue: Arc::new(SegQueue::new()),
         }
     }
 
-    async fn connect(&self) -> Result<impl Deref<Target = Connection> + '_> {
-        let current_state = self.state.read().await;
+    pub async fn user(&self) -> Result<User> {
+        let mut rx = self.user_rx.clone();
 
-        if let Ok(conn) = RwLockReadGuard::try_map(current_state, |x| {
-            if let State::Connected(conn) = x {
-                Some(conn)
-            } else {
-                None
+        loop {
+            if let Some(user) = rx.borrow().clone() {
+                return Ok(user);
             }
-        }) {
-            debug!("already connected");
-            return Ok(conn);
+
+            rx.changed().await?;
         }
-
-        let mut writer = self.state.write().await;
-
-        if let State::Error(err) = &mut *writer {
-            if let Some(err) = err.take() {
-                return Err(err.into());
-            } else {
-                bail!("Error already taken!");
-            }
-        }
-
-        debug!("connecting");
-
-        let (sender, receiver) = channel();
-        let handler = EventHandler {
-            sender: Mutex::new(Some(sender)),
-            state: self.state.clone(),
-        };
-        let discord = Discord::new(self.client_id, Subscriptions::USER, Box::new(handler))?;
-
-        let user = receiver.await??;
-
-        info!("logged in as {}", user.username);
-
-        *writer = State::Connected(Connection { discord, user });
-
-        let new_state = writer.downgrade();
-
-        Ok(RwLockReadGuard::map(new_state, |x| {
-            if let State::Connected(conn) = x {
-                conn
-            } else {
-                unreachable!()
-            }
-        }))
     }
 
-    pub async fn user(&mut self) -> Result<User> {
-        let Connection { user, .. } = &*self.connect().await?;
-        Ok(user.clone())
+    pub async fn with<C, O>(&self, callback: C) -> O
+    where
+        C: FnOnce(&Discord<'static, DiscordHandle>, Responder<O>) + Send + 'static,
+        O: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+
+        self.queue.push(Box::new(move |discord| {
+            callback(discord, Responder(tx));
+        }));
+
+        rx.await.unwrap()
     }
 
-    pub async fn update_activity(&mut self, activity: Activity) -> Result<()> {
-        debug!("updating activity");
-
-        let Connection { discord, .. } = &*self.connect().await?;
-
-        let mut args = ActivityArgs::default();
-        args.activity = Some(activity);
-        discord.update_activity(args).await?;
+    pub async fn update_activity(&self, activity: Activity) -> Result<()> {
+        self.with(move |discord, resp| {
+            discord.update_activity(&activity, move |_, res| {
+                resp.finish(res);
+            });
+        })
+        .await?;
 
         Ok(())
     }
+}
+
+impl Default for DiscordHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl EventHandler for DiscordHandle {
+    fn on_current_user_update(&mut self, discord: &Discord<Self>) {
+        self.user_tx
+            .send(Some(discord.current_user().unwrap()))
+            .unwrap();
+    }
+}
+
+async fn run_discord<F1, F2>(on_connection: F1, client_id: i64) -> Result<!>
+where
+    F1: Fn(DiscordHandle) -> F2,
+    F2: FnOnce(),
+{
+    'reconnect: loop {
+        let handle = DiscordHandle::new();
+
+        let mut client = match Discord::<DiscordHandle>::with_create_flags(
+            client_id,
+            CreateFlags::NoRequireDiscord,
+        ) {
+            Ok(x) => x,
+            Err(discord_game_sdk::Error::Internal) => {
+                warn!("couldn't connect, retrying...");
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+                continue 'reconnect;
+            }
+            Err(e) => return Err(e.into()),
+        };
+        *client.event_handler_mut() = Some(handle.clone());
+
+        let _disconnection = finally_block::finally(on_connection(handle.clone()));
+
+        loop {
+            match client.run_callbacks() {
+                Ok(()) => (),
+                Err(discord_game_sdk::Error::NotRunning) => {
+                    warn!("disconnected, reconnecting...");
+                    continue 'reconnect;
+                }
+                Err(e) => return Err(e.into()),
+            }
+
+            while let Some(callback) = handle.queue.pop() {
+                callback(&client);
+            }
+            tokio::task::yield_now().await;
+        }
+    }
+}
+
+pub async fn run_discord_thread<F1, F2>(on_connection: F1, client_id: i64) -> Result<!>
+where
+    F1: Fn(DiscordHandle) -> F2 + Send + 'static,
+    F2: FnOnce(),
+{
+    let local = LocalSet::new();
+    local.run_until(run_discord(on_connection, client_id)).await
 }

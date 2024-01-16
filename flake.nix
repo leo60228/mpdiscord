@@ -27,7 +27,8 @@
           extensions = [ "rust-src" "clippy" ];
         };
       in rec {
-        packages = {
+        packages = rec {
+          discord-game-sdk = pkgs.callPackage ./game-sdk.nix {};
           mpdiscord = naersk-lib.buildPackage rec {
             name = "mpdiscord";
             version = "unstable";
@@ -35,6 +36,7 @@
             nativeBuildInputs = with pkgs; [ llvmPackages.llvm pkg-config ];
             buildInputs = with pkgs; [ stdenv.cc.libc openssl ];
             override = x: (x // {
+              DISCORD_GAME_SDK_PATH = discord-game-sdk;
               LIBCLANG_PATH = "${pkgs.llvmPackages.libclang}/lib";
               preConfigure = ''
               export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.clang}/resource-root/include $NIX_CFLAGS_COMPILE"
@@ -57,6 +59,7 @@
         devShell = pkgs.mkShell {
           inputsFrom = packages.mpdiscord.builtDependencies;
           nativeBuildInputs = with pkgs; [ rust-dev ];
+          DISCORD_GAME_SDK_PATH = packages.discord-game-sdk;
         };
       }
     );
