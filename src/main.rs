@@ -7,7 +7,7 @@ use std::env::args_os;
 
 #[tokio::main]
 async fn main() -> Result<!> {
-    SimpleLogger::new().init()?;
+    SimpleLogger::new().with_utc_timestamps().init()?;
 
     let config_path = args_os().nth(1).context("Missing configuration path!")?;
     let config = read_config(&config_path).await?;
