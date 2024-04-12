@@ -7,6 +7,7 @@ use tokio::net::TcpStream;
 pub struct Song {
     pub title: Option<String>,
     pub artist: Option<String>,
+    #[serde(rename = "albumartist")]
     pub album_artist: Option<String>,
     pub album: Option<String>,
 }
