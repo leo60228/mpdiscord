@@ -83,7 +83,15 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 }
 
 pub fn get_text(song_status: &SongStatus) -> Option<String> {
-    if let (Some(title), Some(artist)) = (&song_status.song.title, &song_status.song.artist) {
+    if let (Some(title), artist) = (
+        &song_status.song.title,
+        song_status
+            .song
+            .artist
+            .as_deref()
+            .or_else(|| song_status.song.album_artist.as_deref())
+            .unwrap_or("Unknown Artist"),
+    ) {
         let mut notice = format!("{} - {}", title, artist);
         if let Some(album) = &song_status.song.album {
             write!(notice, " (album: {})", album).unwrap();
