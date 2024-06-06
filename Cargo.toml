@@ -11,7 +11,7 @@ anyhow = "1.0.86"
 async-trait = "0.1.80"
 discord-sdk = "0.3.6"
 log = "0.4.21"
-mparsed = "0.2.0"
+mpd_client = "1.4.1"
 reqwest = { version = "0.12.4", features = ["json"] }
 serde = { version = "1.0.203", features = ["derive"] }
 simple_logger = "5.0.0"

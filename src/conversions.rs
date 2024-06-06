@@ -3,6 +3,7 @@ use super::mpd::SongStatus;
 use anyhow::Result;
 use discord_sdk::activity::{Activity, Assets, Timestamps};
 use log::*;
+use mpd_client::responses::{PlayState, Song};
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -29,13 +30,28 @@ fn slugify(title: &str, config: &Config) -> String {
         .collect()
 }
 
+fn get_artist(song: &Song) -> Option<String> {
+    let artists = song.artists();
+    let list = if artists.len() > 0 {
+        artists
+    } else {
+        song.album_artists()
+    };
+
+    if list.len() > 0 {
+        Some(list.join(", "))
+    } else {
+        None
+    }
+}
+
 pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activity> {
     let time = SystemTime::now();
 
     trace!("creating Activity");
     let mut activity = Activity::default();
 
-    if let Some(title) = &song_status.song.title {
+    if let Some(title) = song_status.song.as_ref().and_then(|x| x.title()) {
         debug!("{}", title);
         activity.details = Some(title.to_string());
 
@@ -52,11 +68,11 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 
     let mut state = String::new();
 
-    if let Some(artist) = &song_status.song.artist {
+    if let Some(artist) = song_status.song.as_ref().and_then(get_artist) {
         write!(state, "by {} ", artist)?;
     }
 
-    if let Some(album) = &song_status.song.album {
+    if let Some(album) = song_status.song.as_ref().and_then(|x| x.album()) {
         write!(state, "(album: {})", album)?;
     }
 
@@ -66,7 +82,7 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
         activity.state = Some(state);
     }
 
-    if song_status.status.state == mparsed::State::Play {
+    if song_status.status.state == PlayState::Playing {
         if let Some(elapsed) = song_status.status.elapsed {
             debug!("Elapsed: {:?}", elapsed);
 
@@ -83,22 +99,14 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 }
 
 pub fn get_text(song_status: &SongStatus) -> Option<String> {
-    if let (Some(title), artist) = (
-        &song_status.song.title,
-        song_status
-            .song
-            .artist
-            .as_deref()
-            .or_else(|| song_status.song.album_artist.as_deref())
-            .unwrap_or("Unknown Artist"),
-    ) {
-        let mut notice = format!("{} - {}", title, artist);
-        if let Some(album) = &song_status.song.album {
-            write!(notice, " (album: {})", album).unwrap();
-        }
+    let song = song_status.song.as_ref()?;
+    let title = song.title()?;
+    let artist = get_artist(song).unwrap_or_else(|| "Unknown Artist".to_string());
 
-        Some(notice)
-    } else {
-        None
+    let mut notice = format!("{} - {}", title, artist);
+    if let Some(album) = song.album() {
+        write!(notice, " (album: {})", album).unwrap();
     }
+
+    Some(notice)
 }
