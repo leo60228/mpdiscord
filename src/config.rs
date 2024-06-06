@@ -16,7 +16,7 @@ pub struct Config {
 }
 
 pub async fn read_config(path: impl AsRef<Path>) -> Result<Arc<Config>> {
-    let config_text = fs::read(path).await?;
-    let parsed = toml::from_slice(&config_text)?;
+    let config_text = fs::read_to_string(path).await?;
+    let parsed = toml::from_str(&config_text)?;
     Ok(Arc::new(parsed))
 }

@@ -7,13 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.42"
-async-trait = "0.1.51"
+anyhow = "1.0.86"
+async-trait = "0.1.80"
 discord-sdk = "0.3.6"
-log = "0.4.14"
+log = "0.4.21"
 mparsed = "0.2.0"
-reqwest = { version = "0.11.4", features = ["json"] }
-serde = { version = "1.0.127", features = ["derive"] }
-simple_logger = "1.13.0"
-tokio = { version = "1.9.0", features = ["full"] }
-toml = "0.5.8"
+reqwest = { version = "0.12.4", features = ["json"] }
+serde = { version = "1.0.203", features = ["derive"] }
+simple_logger = "5.0.0"
+tokio = { version = "1.38.0", features = ["full"] }
+toml = "0.8.14"
