@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
-use mpd_client::client::{ConnectionEvent, ConnectionEvents, Subsystem};
-use mpd_client::commands::QueueRange;
+use anyhow::{anyhow, bail, Result};
+use bytes::BytesMut;
+use mpd_client::client::{CommandError, ConnectionEvent, ConnectionEvents, Subsystem};
+use mpd_client::commands::{QueueRange, SetBinaryLimit, SongId};
+pub use mpd_client::responses::{Song, Status};
 use mpd_client::Client;
 use tokio::net::TcpStream;
-
-pub use mpd_client::responses::{Song, Status};
 
 #[derive(Clone, Debug)]
 pub struct SongStatus {
@@ -14,35 +14,28 @@ pub struct SongStatus {
 
 pub struct Mpd {
     client: Client,
-    events: ConnectionEvents,
 }
 
 impl Mpd {
-    pub async fn new() -> Result<Self> {
+    pub async fn connect() -> Result<(Self, ConnectionEvents)> {
         let stream = TcpStream::connect("localhost:6600").await?;
 
         let (client, events) = Client::connect(stream).await?;
 
-        Ok(Self { client, events })
+        client.command(SetBinaryLimit(512 * 1024)).await?;
+
+        Ok((Self { client }, events))
     }
 
     pub fn protocol_version(&self) -> &str {
         self.client.protocol_version()
     }
 
-    pub async fn status(&mut self) -> Result<Status> {
+    pub async fn status(&self) -> Result<Status> {
         Ok(self.client.command(mpd_client::commands::Status).await?)
     }
 
-    pub async fn idle(&mut self) -> Result<Subsystem> {
-        match self.events.next().await {
-            Some(ConnectionEvent::SubsystemChange(x)) => Ok(x),
-            Some(ConnectionEvent::ConnectionClosed(err)) => Err(err.into()),
-            None => Err(anyhow!("connection closed")),
-        }
-    }
-
-    pub async fn song_status(&mut self) -> Result<SongStatus> {
+    pub async fn song_status(&self) -> Result<SongStatus> {
         let status = self.status().await?;
         let song = if let Some((_, id)) = status.current_song {
             let range = self.client.command(QueueRange::song(id)).await?;
@@ -52,5 +45,32 @@ impl Mpd {
         };
 
         Ok(SongStatus { song, status })
+    }
+
+    pub async fn song_art(&self, id: SongId) -> Result<Option<(BytesMut, Option<String>)>> {
+        let range = match self.client.command(QueueRange::song(id)).await {
+            Ok(x) => x,
+            Err(CommandError::ErrorResponse {
+                error: mpd_client::protocol::response::Error { code: 50, .. },
+                ..
+            }) => return Ok(None),
+            Err(err) => bail!(err),
+        };
+        let song = if let Some(x) = range.into_iter().next() {
+            x
+        } else {
+            return Ok(None);
+        };
+        let uri = song.song.url;
+
+        Ok(self.client.album_art(&uri).await?)
+    }
+}
+
+pub async fn idle(events: &mut ConnectionEvents) -> Result<Subsystem> {
+    match events.next().await {
+        Some(ConnectionEvent::SubsystemChange(x)) => Ok(x),
+        Some(ConnectionEvent::ConnectionClosed(err)) => Err(err.into()),
+        None => Err(anyhow!("connection closed")),
     }
 }

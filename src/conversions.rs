@@ -63,6 +63,17 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
                 large_text: Some(title.to_string()),
                 ..Default::default()
             });
+        } else if let Some(web_config) = &config.web {
+            debug!("(Dynamic cover)");
+            activity.assets = Some(Assets {
+                large_image: Some(format!(
+                    "{}/art/{}",
+                    web_config.public_addr,
+                    song_status.status.current_song.unwrap().1 .0
+                )),
+                large_text: Some(title.to_string()),
+                ..Default::default()
+            });
         }
     }
 

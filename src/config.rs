@@ -1,15 +1,25 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::fs;
+
+#[derive(Serialize, Deserialize)]
+pub struct WebConfig {
+    pub listen_addr: SocketAddr,
+    pub public_addr: String,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub artfiles: Vec<String>,
     pub discord_client_id: i64,
     pub mastodon_token: String,
+
+    #[serde(default)]
+    pub web: Option<WebConfig>,
 
     #[serde(default)]
     pub art_overrides: HashMap<String, String>,

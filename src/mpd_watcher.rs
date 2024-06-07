@@ -1,14 +1,10 @@
 use super::mpd::Mpd;
-use super::StatusTx;
+use super::{mpd, StatusTx};
 use anyhow::Result;
 use log::*;
+use mpd_client::client::ConnectionEvents;
 
-pub async fn mpd_watcher(tx: StatusTx) -> Result<!> {
-    trace!("connecting to mpd");
-    let mut mpd = Mpd::new().await?;
-
-    info!("connected to mpd {}", mpd.protocol_version());
-
+pub async fn mpd_watcher(mpd: &Mpd, mut events: ConnectionEvents, tx: StatusTx) -> Result<!> {
     loop {
         trace!("getting status");
         let song_status = mpd.song_status().await?;
@@ -17,6 +13,6 @@ pub async fn mpd_watcher(tx: StatusTx) -> Result<!> {
         tx.send(song_status)?;
 
         info!("sent status, idling");
-        mpd.idle().await?;
+        mpd::idle(&mut events).await?;
     }
 }
