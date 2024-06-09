@@ -3,11 +3,13 @@
 use crate::mpd::Mpd;
 use anyhow::Result;
 use config::Config;
-use log::{info, trace};
+use log::{info, trace, warn};
 use mpd::SongStatus;
 use std::future::pending;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::broadcast;
+use tokio::time::sleep;
 
 pub mod art_server;
 pub mod config;
@@ -33,7 +35,16 @@ pub async fn run(config: Arc<Config>) -> Result<!> {
 
     let mpd_watch = mpd_watcher::mpd_watcher(&mpd, events, tx.clone());
     let discord_thread = updaters::discord::discord_updater(config.clone(), rx);
-    let mastodon = updaters::mastodon::mastodon_updater(config.clone(), tx.subscribe());
+    let mastodon = async {
+        loop {
+            if let Err(err) =
+                updaters::mastodon::mastodon_updater(config.clone(), tx.subscribe()).await
+            {
+                warn!("{}", err);
+            }
+            sleep(Duration::from_millis(5000)).await;
+        }
+    };
     let art_server = async {
         if let Some(web_config) = &config.web {
             art_server::serve(web_config, mpd.clone()).await
