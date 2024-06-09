@@ -22,7 +22,7 @@ impl Mpd {
 
         let (client, events) = Client::connect(stream).await?;
 
-        client.command(SetBinaryLimit(512 * 1024)).await?;
+        client.command(SetBinaryLimit(5 * 1024 * 1024)).await?;
 
         Ok((Self { client }, events))
     }

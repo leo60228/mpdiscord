@@ -12,6 +12,7 @@ async-trait = "0.1.80"
 axum = "0.7.5"
 bytes = "1.6.0"
 discord-sdk = "0.3.6"
+image = "0.25.1"
 log = "0.4.21"
 mpd_client = "1.4.1"
 reqwest = { version = "0.12.4", features = ["json"] }
