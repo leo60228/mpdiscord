@@ -32,13 +32,13 @@ fn slugify(title: &str, config: &Config) -> String {
 
 fn get_artist(song: &Song) -> Option<String> {
     let artists = song.artists();
-    let list = if artists.len() > 0 {
+    let list = if !artists.is_empty() {
         artists
     } else {
         song.album_artists()
     };
 
-    if list.len() > 0 {
+    if !list.is_empty() {
         Some(list.join(", "))
     } else {
         None
