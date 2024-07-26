@@ -401,7 +401,7 @@ dependencies = [
 [[package]]
 name = "discord-sdk"
 version = "0.3.6"
-source = "git+https://github.com/leo60228/discord-sdk?branch=serialize-activity-kind#455dbeca45fc82afe475a8b3fe0384333020434e"
+source = "git+https://github.com/leo60228/discord-sdk?branch=serialize-activity-kind#9d8cea705db765bb661b21a02a3cec3b804dd71b"
 dependencies = [
  "anyhow",
  "app_dirs2",
