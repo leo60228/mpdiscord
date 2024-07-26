@@ -1,7 +1,7 @@
 use super::config::Config;
 use super::mpd::SongStatus;
 use anyhow::Result;
-use discord_sdk::activity::{Activity, Assets, Timestamps};
+use discord_sdk::activity::{Activity, ActivityKind, Assets, Timestamps};
 use log::*;
 use mpd_client::responses::{PlayState, Song};
 use std::fmt::Write;
@@ -105,6 +105,8 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
             });
         }
     }
+
+    activity.kind = ActivityKind::Listening;
 
     Ok(activity)
 }
