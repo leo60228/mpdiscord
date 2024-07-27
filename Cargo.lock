@@ -400,8 +400,9 @@ dependencies = [
 
 [[package]]
 name = "discord-sdk"
-version = "0.3.6"
-source = "git+https://github.com/leo60228/discord-sdk?branch=serialize-activity-kind#9d8cea705db765bb661b21a02a3cec3b804dd71b"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00d37582bc3fbef904777f3910e3a68303467b4ec823c9eed9401651154f1453"
 dependencies = [
  "anyhow",
  "app_dirs2",
