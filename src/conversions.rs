@@ -55,12 +55,18 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
         debug!("{}", title);
         activity.details = Some(title.to_string());
 
+        let album_line = song_status
+            .song
+            .as_ref()
+            .and_then(|x| x.album())
+            .map(|x| format!("(album: {x})"));
+
         let slug = slugify(title, config);
         if config.artfiles.contains(&slug) {
             debug!("(Cover)");
             activity.assets = Some(Assets {
                 large_image: Some(slug),
-                large_text: Some(title.to_string()),
+                large_text: album_line,
                 ..Default::default()
             });
         } else if let Some(web_config) = &config.web {
@@ -71,7 +77,7 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
                     web_config.public_addr,
                     song_status.status.current_song.unwrap().1 .0
                 )),
-                large_text: Some(title.to_string()),
+                large_text: album_line,
                 ..Default::default()
             });
         }
@@ -81,10 +87,6 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 
     if let Some(artist) = song_status.song.as_ref().and_then(get_artist) {
         write!(state, "by {} ", artist)?;
-    }
-
-    if let Some(album) = song_status.song.as_ref().and_then(|x| x.album()) {
-        write!(state, "(album: {})", album)?;
     }
 
     debug!("{}", state);
