@@ -100,16 +100,13 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
             debug!("Elapsed: {:?}", elapsed);
 
             let start = time - elapsed;
-            let start_since_epoch = start.duration_since(UNIX_EPOCH)?;
-            let end = if let Some(duration) = song_status.status.duration {
-                let end = start + duration;
-                let end_since_epoch = end.duration_since(UNIX_EPOCH)?;
-                Some(end_since_epoch.as_secs() as _)
-            } else {
-                None
-            };
+            let since_epoch = start.duration_since(UNIX_EPOCH)?;
+            let end = song_status
+                .status
+                .duration
+                .map(|duration| (duration.as_secs() + since_epoch.as_secs()) as _);
             activity.timestamps = Some(Timestamps {
-                start: Some(start_since_epoch.as_secs() as _),
+                start: Some(since_epoch.as_secs() as _),
                 end,
             });
         }
