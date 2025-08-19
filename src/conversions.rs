@@ -4,6 +4,7 @@ use anyhow::Result;
 use discord_sdk::activity::{Activity, ActivityKind, Assets, Timestamps};
 use log::*;
 use mpd_client::responses::{PlayState, Song};
+use rand::distr::{Alphanumeric, SampleString};
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -70,12 +71,13 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
                 ..Default::default()
             });
         } else if let Some(web_config) = &config.web {
-            debug!("(Dynamic cover)");
+            let token = Alphanumeric.sample_string(&mut rand::rng(), 12);
             activity.assets = Some(Assets {
                 large_image: Some(format!(
-                    "{}/art/{}",
+                    "{}/art/{}?{}",
                     web_config.public_addr,
-                    song_status.status.current_song.unwrap().1 .0
+                    song_status.status.current_song.unwrap().1 .0,
+                    token
                 )),
                 large_text: album_line,
                 ..Default::default()
