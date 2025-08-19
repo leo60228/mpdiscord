@@ -15,7 +15,7 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ rust-overlay.overlays.default naersk.overlay ];
+          overlays = [ rust-overlay.overlays.default naersk.overlays.default ];
         };
         rust = pkgs.rust-bin.nightly.latest.default;
         inherit (pkgs.rust-bin.nightly.latest) cargo;

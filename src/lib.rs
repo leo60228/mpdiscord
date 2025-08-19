@@ -37,11 +37,9 @@ pub async fn run(config: Arc<Config>) -> Result<!> {
     let discord_thread = updaters::discord::discord_updater(config.clone(), rx);
     let mastodon = async {
         loop {
-            if let Err(err) =
-                updaters::mastodon::mastodon_updater(config.clone(), tx.subscribe()).await
-            {
-                warn!("{}", err);
-            }
+            let Err(err) =
+                updaters::mastodon::mastodon_updater(config.clone(), tx.subscribe()).await;
+            warn!("{}", err);
             sleep(Duration::from_millis(5000)).await;
         }
     };
