@@ -64,7 +64,7 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
 
         let slug = slugify(title, config);
         if config.artfiles.contains(&slug) {
-            debug!("(Cover)");
+            debug!("(Cover: {})", slug);
             activity.assets = Some(Assets {
                 large_image: Some(slug),
                 large_text: album_line,
@@ -72,13 +72,15 @@ pub fn get_activity(song_status: &SongStatus, config: &Config) -> Result<Activit
             });
         } else if let Some(web_config) = &config.web {
             let token = Alphanumeric.sample_string(&mut rand::rng(), 12);
+            let url = format!(
+                "{}/art/{}?{}",
+                web_config.public_addr,
+                song_status.status.current_song.unwrap().1 .0,
+                token
+            );
+            debug!("(Dynamic cover: {})", url);
             activity.assets = Some(Assets {
-                large_image: Some(format!(
-                    "{}/art/{}?{}",
-                    web_config.public_addr,
-                    song_status.status.current_song.unwrap().1 .0,
-                    token
-                )),
+                large_image: Some(url),
                 large_text: album_line,
                 ..Default::default()
             });
